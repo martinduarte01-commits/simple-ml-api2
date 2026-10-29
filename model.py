@@ -1,6 +1,20 @@
 
 
+FROM python:3.11-slim
 
+WORKDIR /app
+
+COPY . .
+
+RUN pip install --no-cache-dir \
+    pandas \
+    numpy \
+    scikit-learn \
+    matplotlib
+
+RUN mkdir -p models
+
+RUN python model.py
 
 import pandas as pd
 import sklearn
