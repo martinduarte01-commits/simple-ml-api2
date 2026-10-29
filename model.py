@@ -2,205 +2,286 @@
 
 
 
+mport pandas as pd
+import sklearn
+import matplotlib.pyplot as plt
+import seaborn as sns
 
-import pandas as pd
+# Setup Seaborn
+sns.set_style("whitegrid")
+sns.set_context("talk")
+
+orig_url = "https://docs.google.com/spreadsheets/d/1mlXah6ADb88FI6bL0pIQap0gxD7IoimT/edit?usp=sharing"
+file_id = orig_url.split('/')[-2]
+data_path='https://drive.google.com/uc?export=download&id=' + file_id
+df_offers = pd.read_excel(data_path, sheet_name=0)
+
+# subset data to get useful features
+df_offers = df_offers.iloc[:, :6]
+df_offers.columns = ["offer_id", "campaign", "wine_variety", "min_qty", "discount", "origin"]
+df_offers.head(15)
+
+"""The second dataset below in the second worksheet contains transactional data i.e., which offer each customer responded to and ended up buying it"""
+
+orig_url = "https://docs.google.com/spreadsheets/d/1mlXah6ADb88FI6bL0pIQap0gxD7IoimT/edit?usp=sharing"
+file_id = orig_url.split('/')[-2]
+data_path='https://drive.google.com/uc?export=download&id=' + file_id
+df_transactions = pd.read_excel(data_path, sheet_name=1)
+
+df_transactions.columns = ["customer_name", "offer_id"]
+df_transactions['frequency'] = 1
+df_transactions.head(15)
+
+df_merged = df_offers.merge(df_transactions, how='left', on='offer_id')
+df_merged.head(20)
+
+df_merged.shape
+
+
+X = pivot.values
+X
+
+X.shape
+
+
+
+from sklearn.cluster import KMeans
+
+ss = []
+cluster_ranges = range(2, 11)
+
+for K in cluster_ranges:
+    # fit a k-means model
+    kmeans = KMeans(n_clusters=K, random_state=42, n_init=1000, max_iter=10000)
+    kmeans.fit_predict(X)
+    # stores the ss errors.
+    ss.append(kmeans.inertia_)
+
+ax = sns.lineplot(x=cluster_ranges, y=ss)
+ax.set_title("Error vs K for Wine Offer Data")
+ax.set_xlabel('Number of Clusters')
+ax.set_ylabel('SS Error');
+
+
+
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_samples, silhouette_score
+from sklearn.decomposition import PCA
+import matplotlib.cm as cm
 import numpy as np
 
-# boston.csv
-gdrive_data_url = "https://drive.google.com/file/d/1cnIxAAqXnG9vHO59EuRBbnit_3rM_UOT/view?usp=share_link"
-file_id = gdrive_data_url.split('/')[-2]
-data_file='https://drive.google.com/uc?export=download&id=' + file_id
-df = pd.read_csv(data_file)
-df.drop("Unnamed: 0", axis=1, inplace=True)
-df.columns = df.columns.str.upper()
-df.rename(columns={'BLACK':'B', 'MEDV':'Price'}, inplace=True)
+avg_silhouette_scores = []
+cluster_ranges = range(2, 7)
+
+# Get rid of warning of too many plots open
+plt.rcParams.update({'figure.max_open_warning': 0})
+
+for K in cluster_ranges:
+    # Create a subplot with 1 row and 2 columns
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    fig.set_size_inches(18, 7)
+
+    # The 1st subplot is the silhouette plot
+    # The silhouette coefficient can range from -1, 1
+    ax.set_xlim([-.4, 1])
+    # The (K+1)*10 is for inserting blank space between silhouette
+    # plots of individual clusters, to demarcate them clearly.
+    ax.set_ylim([0, len(X) + (K + 1) * 10])
+
+    # Initialize the clusterer with n_clusters value and a random generator
+    # seed of 42 for reproducibility.
+    kmeans_model = KMeans(n_clusters=K, random_state=42, n_init=1000, max_iter=10000)
+    cluster_labels = kmeans_model.fit_predict(X)
 
-X = df.drop(columns=['Price'])
-y = df[['Price']]
-y['Price'] = y['Price'].apply(lambda x: 1 if x > 30 else 0)
+    # The silhouette_score gives the average value for all the samples.
+    # This gives a perspective into the density and separation of the formed
+    # clusters
+    silhouette_avg = (silhouette_score(X, cluster_labels))
+    avg_silhouette_scores.append(silhouette_avg)
 
-y.head()
+    # Compute the silhouette scores for each sample
+    sample_silhouette_values = silhouette_samples(X, cluster_labels)
+
+    y_lower = 10
+    for i in range(K):
+        # Aggregate the silhouette scores for samples belonging to
+        # cluster i, and sort them
+        ith_cluster_silhouette_values = \
+            sample_silhouette_values[cluster_labels == i]
+
+        ith_cluster_silhouette_values.sort()
+
+        size_cluster_i = ith_cluster_silhouette_values.shape[0]
+        y_upper = y_lower + size_cluster_i
+
+        color = cm.nipy_spectral(float(i) / K)
+        ax1.fill_betweenx(np.arange(y_lower, y_upper),
+                          0, ith_cluster_silhouette_values,
+                          facecolor=color, edgecolor=color, alpha=0.7)
+
+        # Label the silhouette plots with their cluster numbers at the middle
+        ax1.text(-0.05, y_lower + 0.5 * size_cluster_i, str(i))
 
-from sklearn.model_selection import train_test_split
+        # Compute the new y_lower for next plot
+        y_lower = y_upper + 10  # 10 for the 0 samples
 
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    ax1.set_title(f"Silhouette analysis for KMeans clustering with n_clusters = {K}")
+    ax1.set_xlabel("Silhouette coefficient values")
+    ax1.set_ylabel("Cluster label")
 
-X_train.shape, X_test.shape
+    # The vertical line for average silhouette score of all the values
+    ax1.axvline(x=silhouette_avg, color="red", linestyle="--")
 
+    ax1.set_yticks([])  # Clear the yaxis labels / ticks
+    ax1.set_xticks([-0.4, -0.2, 0, 0.2, 0.4, 0.6, 0.8, 1])
 
+    # 2nd Plot showing the actual clusters formed
+    colors = cm.nipy_spectral((cluster_labels.astype(float) + 1) / K)
+    # to visualize the actual data in a continuous space we use PCA
+    pca = PCA(n_components=2).fit(X)
+    data2D = pca.transform(X)
+    ax2.scatter(data2D[:, 0], data2D[:, 1], marker='o', s=30, lw=0, alpha=0.7,
+                c=colors, edgecolor='k')
 
-from pycaret.classification import ClassificationExperiment
+    # Labeling the clusters
+    centers = kmeans_model.cluster_centers_
+    # Draw white circles at cluster centers
 
-train_data = pd.concat([X_train, y_train], axis=1)
 
-exp = ClassificationExperiment(
-    target="Price",
-    fold = 5,
-    session_id=13,
-    normalize=True,
-    log_experiment = True,
-    verbose = True
-).fit(train_data)
+    # Draw white circles at cluster centers
+    ax2.scatter(centers[:, 0], centers[:, 1], marker='o',
+                c="white", alpha=1, s=200, edgecolor='k')
 
-pd.DataFrame(list(exp.get_params().items()), columns=['Parameter', 'Value'])
+    for i, c in enumerate(centers):
+        ax2.scatter(c[0], c[1], marker='$%d$' % i, alpha=1,
+                    s=50, edgecolor='k')
 
-pd.DataFrame(list(exp._fit_state.items()), columns=["Description", "Value"])
 
-"""# 3. Compare Baseline"""
+    ax2.set_title("The visualization of the clustered data.")
+    ax2.set_xlabel(f"Feature space for the 1st feature : {pivot.columns[0][1]}")
+    ax2.set_ylabel(f"Feature space for the 2nd feature : {pivot.columns[1][1]}")
 
-exp.models()
+    plt.suptitle(
+        (
+            f"Silhouette analysis for KMeans clustering on sample data with K = {K}"
+        ),
+        fontsize=14,
+        fontweight="bold",
+    )
+print("\n")
 
-result = exp.compare_models(errors="raise")
+plt.show()
 
-leaderboard = result.leaderboard
-model = result.models
-best_model = result.best
+"""Now plot average Silhouette Score for each value of K."""
 
-leaderboard
+ax = sns.lineplot(x=cluster_ranges, y=avg_silhouette_scores)
+ax.set_title('K vs Average Silhouette Score')
+ax.set_xlabel('Number of Clusters')
+ax.set_ylabel('Average Silhouette Score');
 
-model
+avg_silhouette_scores
 
-best_model
+from sklearn.decomposition import PCA
 
-tuned_result = exp.tune_model(best_model, n_iter=50, optimize="f1")
+# First calculate top two PCA features.
+pca = PCA(n_components=2)
+pca_features = pca.fit_transform(X)
+x = pca_features[:,0]
+y = pca_features[:,1]
 
-tuned_result
+K=3
 
+kmeans = KMeans(n_clusters=K, random_state=42, n_init=1000, max_iter=10000)
+cl_labels = kmeans.fit_predict(X)
+df_pca_features = pd.DataFrame({'cluster_id': cl_labels,
+                                'pc_1':x,
+                                'pc_2':y})
+df_pca_features
 
+ax = sns.scatterplot(x='pc_1', y='pc_2',
+                hue='cluster_id',
+                size='cluster_id',
+                data=df_pca_features,
+                palette='tab20',
+                legend='full')
+ax.set_xlabel('PCA Feature 1')
+ax.set_ylabel('PCA Feature 2')
+ax.set_title('PCA results of KMeans with ' + str(K) + ' clusters')
+ax.legend(bbox_to_anchor=(1.04,1.02), loc='upper left', fontsize='large');
 
-rf = exp.create_model("rf")
 
-"""# 5. Tune Hyperparameters"""
+cl_labels
 
-tuned_rf = exp.tune_model(rf.pipeline, n_iter=50, optimize="f1").pipeline
+customer_segments = pd.DataFrame({
+    'customer_name': pivot.index.tolist(),
+    'Cluster': cl_labels
+})
 
-rf
+customer_segments.head(10)
 
-tuned_rf
+df_merged.head(10)
 
+df_cluster_merged = df_merged.merge(customer_segments, on='customer_name')
+df_cluster_merged.head(10)
 
 
-en_rf = exp.create_model('rf')
+months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+                                           'September', 'October', 'November', 'December']
+res = pd.crosstab(df_cluster_merged.Cluster, df_cluster_merged.campaign)
+res = res[months]
+res
 
-bagged_rf = exp.ensemble_model(en_rf.pipeline, n_estimators=50).pipeline
+from matplotlib import cm
 
-bagged_rf
+custom_colors = cm.get_cmap('tab20', 12)
 
-boosted_rf = exp.ensemble_model(en_rf.pipeline, method="Boosting").pipeline
+fig, ax = plt.subplots(figsize=(8, 6))
 
-boosted_rf
+res.plot(kind='bar', ax=ax, cmap=custom_colors)
+ax.legend(bbox_to_anchor=(1.02, 1.02), fontsize='large')
+plt.xlabel('Customer Segment')
+plt.xticks(rotation=0)
+plt.ylabel('Wine Offers Purchased')
+plt.title('Wine Offers Purchased by Customer Segment');
 
 
+res[res <= 15] = 0
+res
 
-from pycaret.plots.classification import class_distribution, confusion_matrix, roc_curve
-from pycaret.plots.feature import permutation_importance
-from pycaret.plots.regression import prediction_error
+fig, ax = plt.subplots(figsize=(8, 6))
 
-confusion_matrix(rf.pipeline, X_test, y_test).show()
+res.plot(kind='bar', ax=ax, cmap=custom_colors)
+ax.legend(bbox_to_anchor=(1.02, 1.02), fontsize='large')
+plt.xlabel('Customer Segment')
+plt.xticks(rotation=0)
+plt.ylabel('Wine Offers Purchased')
+plt.title('Wine Offers Purchased by Customer Segment > 15 Offers');
 
-confusion_matrix(tuned_rf, X_test, y_test).show()
 
-roc_curve(rf.pipeline, X_test, y_test).show()
 
-prediction_error(rf.pipeline, exp.X_test, exp.y_test).show()
+res = pd.crosstab(df_cluster_merged.Cluster, df_cluster_merged.wine_variety)
+res
 
-class_distribution(exp.y_test).show()
+fig, ax = plt.subplots(figsize=(8, 6))
 
-"""# 8. Interpret Model
+res.plot(kind='bar', ax=ax, cmap=custom_colors)
+ax.legend(bbox_to_anchor=(1.02, 1.02), fontsize='large')
+plt.xlabel('Customer Segment')
+plt.xticks(rotation=0)
+plt.ylabel('Wine Type Purchased')
+plt.title('Wine Type Purchased by Customer Segment');
 
-## Via `Pycaret`
-"""
 
-from pycaret.plots.feature import permutation_importance, shap_summary, \
-shap_beeswarm, partial_dependence, ice_curve
 
-permutation_importance(rf.pipeline, exp.X_train, exp.y_train).show()
+res = pd.crosstab(df_cluster_merged.Cluster, df_cluster_merged.min_qty)
+res
 
-fig_beeswarm = shap_beeswarm(rf.pipeline, exp.X_test)
-fig_beeswarm.show()
+fig, ax = plt.subplots(figsize=(8, 6))
 
-fig_summary = shap_summary(rf.pipeline, exp.X_test)
-fig_summary.show()
-
-fig_pdp = partial_dependence(rf.pipeline, exp.X_test, feature="RM")
-fig_pdp.show()
-
-# Two-feature interaction Partial Dependence
-fig_pdp_2d = partial_dependence(rf.pipeline, exp.X_test, feature=("RM", "LSTAT"))
-fig_pdp_2d.show()
-
-fig_ice = ice_curve(rf.pipeline, exp.X_test, feature="RM")
-fig_ice.show()
-
-
-
-import shap
-
-estimator = rf.pipeline.steps[-1][1]
-preprocessor = rf.pipeline[:-1] if len(rf.pipeline.steps) > 1 else None
-
-X_test_transformed = preprocessor.transform(X_test) if preprocessor else X_test
-
-# Reattach feature names
-if preprocessor:
-    feature_names = preprocessor.get_feature_names_out()
-    X_test_transformed = pd.DataFrame(X_test_transformed, columns=feature_names, index=X_test.index)
-else:
-    feature_names = X_test.columns
-
-explainer = shap.Explainer(estimator, X_test_transformed)
-shap_values = explainer(X_test_transformed)
-
-# Extract positive class for binary classification models
-if len(shap_values.shape) == 3:
-    shap_values = shap_values[:, :, 1]
-
-shap.plots.bar(shap_values)
-
-rm_idx = list(X_test_transformed.columns).index("RM")
-shap.plots.scatter(shap_values[:, rm_idx], color=shap_values)
-
-# Extract expected value for positive class
-if isinstance(explainer.expected_value, (list, np.ndarray)):
-    base_val = explainer.expected_value[1]
-else:
-    base_val = explainer.expected_value
-
-shap.initjs()
-
-shap.force_plot(
-    base_val,
-    shap_values.values,
-    X_test_transformed
-)
-
-shap.plots.beeswarm(shap_values)
-
-shap.plots.waterfall(shap_values[11])
-
-
-
-from sklearn.metrics import classification_report, confusion_matrix
-
-best_pred_res = exp.predict_model(best_model, data=X_test)
-best_pred_res.predictions.head()
-
-best_labels = best_pred_res.predictions["prediction_label"]
-print("--- Best Model Metrics ---")
-print(confusion_matrix(y_test, best_labels))
-print(classification_report(y_test, best_labels))
-
-rf_pred_res = exp.predict_model(rf.pipeline, data=X_test)
-rf_labels = rf_pred_res.predictions["prediction_label"]
-
-print("--- Random Forest Metrics ---")
-print(confusion_matrix(y_test, rf_labels))
-print(classification_report(y_test, rf_labels))
-
-"""# 10. Save / Load Model"""
-
-exp.save_model(rf, 'rf.model')
-
-loaded_bestmodel = exp.load_model("rf.model")
-print(loaded_bestmodel)
+res.plot(kind='bar', ax=ax)
+ax.legend(bbox_to_anchor=(1.02, 1.02), fontsize='large')
+plt.xlabel('Customer Segment')
+plt.xticks(rotation=0)
+plt.ylabel('Wine Quantity Purchased')
+plt.title('Wine Quantity Purchased by Customer Segment');
 
